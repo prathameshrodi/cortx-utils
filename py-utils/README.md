@@ -39,13 +39,16 @@ $ sudo yum install libffi-devel
   - Create pip package
     - It will create `cortx_py_utils-1.0.0-py3-none-any.whl`
 ```bash
+$ pip3 install wheel
 $ python3 setup.py bdist_wheel
 ```
 
   - Create RPM Package
-    - It will create `cortx-py-utils-1.0.0-1.noarch.rpm`
+It will create `cortx-py-utils-1.0.0-1_<git-version>.noarch.rpm` by default. One can change the version by passing extra `-v <version_string>` parameter.
+Below command passes version string as 2.0.0 and build number 2, which creates `cortx-py-utils-2.0.0-2_<git-version>.noarch.rpm`
+Run below command from repo root.
 ```bash
-$ python3.6 setup.py bdist_rpm --post-install utils-post-install --post-uninstall utils-post-uninstall
+$ ./jenkins/build.sh -v 2.0.0 -b 2
 ```
 
 ## Installation
@@ -56,6 +59,8 @@ $ pip3 install cortx_py_utils-1.0.0-py3-none-any.whl
 ```
 
   - Installation with RPM package
+Note : The rpm package installation will fail if any dependent python package is not installed.
+Please refer to WIKI (https://github.com/Seagate/cortx-utils/wiki/%22cortx-py-utils%22-single-node-manual-provisioning)
 ```bash
 $ cd dist;
 $ yum install -y cortx-py-utils-1.0.0-1.noarch.rpm

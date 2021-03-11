@@ -1,5 +1,5 @@
-# !/usr/bin/env python3
-#
+#!/usr/bin/env python3
+
 # CORTX Python common library.
 # Copyright (c) 2020 Seagate Technology LLC and/or its Affiliates
 #
@@ -18,27 +18,36 @@
 
 
 import unittest
-from cortx.utils.message_bus import MessageBus, MessageConsumer
+from cortx.utils.message_bus import MessageBus, MessageProducer, MessageConsumer
 
 
 class TestMessage(unittest.TestCase):
-    """ Test MessageBus related functionality. """
+    """ Test MessageBus related functionality """
 
-    def test_receive(self):
-        """ Test Receive Message. """
-        message_bus = MessageBus()
-        consumer = MessageConsumer(message_bus, consumer_id='sel', \
-            consumer_group='sel', message_types=['Sel'], auto_ack=False, \
-            offset='latest')
+    message_bus = MessageBus()
+
+    def test_send(self):
+        """ Test Send Message """
+        messages = []
+        producer = MessageProducer(TestMessage.message_bus, \
+            producer_id='p1', message_type='big')
+
+        self.assertIsNotNone(producer, "Producer not found")
+        for i in range(0, 100):
+            messages.append("This is message" + str(i))
+        self.assertEqual(len(messages), 100)
+        self.assertIsInstance(messages, list)
+        producer.send(messages)
+
+    def test_count(self):
+        """ Test Unread Message Count """
+        consumer = MessageConsumer(TestMessage.message_bus, \
+            consumer_id='sensors', consumer_group='test_group', \
+            message_types=['big'], auto_ack=True, offset='latest')
 
         self.assertIsNotNone(consumer, "Consumer not found")
-        while True:
-            try:
-                message = consumer.receive()
-                self.assertIsNotNone(message, "Message not found")
-                consumer.ack()
-            except Exception as e:
-                break
+        unread_count = consumer.get_unread_count()
+        self.assertEqual(unread_count, 100)
 
 
 if __name__ == '__main__':

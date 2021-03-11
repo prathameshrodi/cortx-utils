@@ -17,11 +17,7 @@
 
 import configparser
 import errno
-import json
 import os
-import toml
-import yaml
-from json.decoder import JSONDecodeError
 
 from cortx.utils.kv_store.error import KvError
 from cortx.utils.kv_store.kv_store import KvStore
@@ -30,35 +26,39 @@ from cortx.utils.process import SimpleProcess
 
 
 class JsonKvStore(KvStore):
-    """  Represents a JSON File Store """
+    """ Represents a JSON File Store """
 
     name = "json"
 
     def __init__(self, store_loc, store_path, delim='>'):
+        import json
         KvStore.__init__(self, store_loc, store_path, delim)
         if not os.path.exists(self._store_path):
             with open(self._store_path, 'w+') as f:
-                pass
+                json.dump({}, f, indent=2)
 
     def load(self) -> KvPayload:
         """ Reads from the file """
+        import json
+        from json.decoder import JSONDecodeError
         data = {}
         with open(self._store_path, 'r') as f:
             try:
                 data = json.load(f)
-
-            except JSONDecodeError:
-                pass
+            except JSONDecodeError as jerr:
+                raise KvError(errno.EINVAL, "Invalid JSON format %s",
+                                   jerr.__str__())
         return KvPayload(data, self._delim)
 
     def dump(self, data) -> None:
         """ Saves data onto the file """
+        import json
         with open(self._store_path, 'w') as f:
             json.dump(data.get_data(), f, indent=2)
 
 
 class YamlKvStore(KvStore):
-    """  Represents a YAML File Store """
+    """ Represents a YAML File Store """
 
     name = "yaml"
 
@@ -70,16 +70,24 @@ class YamlKvStore(KvStore):
 
     def load(self) -> KvPayload:
         """ Reads from the file """
+        import yaml
         with open(self._store_path, 'r') as f:
-            return KvPayload(yaml.safe_load(f), self._delim)
+            try:
+                data = yaml.safe_load(f)
+            except Exception as yerr:
+                raise KvError(errno.EINVAL, "Invalid YAML format %s",
+                                   yerr.__str__())
+        return KvPayload(data, self._delim)
 
     def dump(self, data) -> None:
+        """ Saves data onto the file """
+        import yaml
         with open(self._store_path, 'w') as f:
             yaml.dump(data.get_data(), f, default_flow_style=False)
 
 
 class TomlKvStore(KvStore):
-    """  Represents a TOML File Store """
+    """ Represents a TOML File Store """
 
     name = "toml"
 
@@ -91,11 +99,18 @@ class TomlKvStore(KvStore):
 
     def load(self) -> KvPayload:
         """ Reads from the file """
+        import toml
         with open(self._store_path, 'r') as f:
-            return KvPayload(toml.load(f, dict), self._delim)
+            try:
+                data = toml.load(f, dict)
+            except Exception as terr:
+                raise KvError(errno.EINVAL, "Invalid TOML format %s",
+                                   terr.__str__())
+        return KvPayload(data, self._delim)
 
     def dump(self, data) -> None:
         """ Saves data onto the file """
+        import toml
         with open(self._store_path, 'w') as f:
             toml.dump(data.get_data(), f)
 
@@ -138,7 +153,7 @@ class IniKvPayload(KvPayload):
 
 
 class IniKvStore(KvStore):
-    """  Represents a Ini File Store """
+    """ Represents a Ini File Store """
 
     name = "ini"
 
@@ -149,7 +164,11 @@ class IniKvStore(KvStore):
 
     def load(self) -> IniKvPayload:
         """ Reads from the file """
-        self._config.read(self._store_path)
+        try:
+            self._config.read(self._store_path)
+        except Exception as err:
+            raise KvError(errno.EINVAL, "Invalid INI format %s",
+                               err.__str__())
         return IniKvPayload(self._config, self._delim)
 
     def dump(self, data) -> None:
@@ -190,30 +209,44 @@ class JsonMessageKvStore(JsonKvStore):
 
     def load(self) -> KvPayload:
         """ Load json to python Dictionary Object. Returns Dict """
+        import json
         return KvPayload(json.loads(self._store_path), self._delim)
 
     def dump(self, data: dict) -> None:
         """ Sets data after converting to json """
+        import json
         self._store_path = json.dumps(data.get_data())
 
 
-class TextKvStore(KvStore):
-    """ Represents a TEXT File Store """
+class PropertiesKvStore(KvStore):
+    """ Represents a Properties File Store """
 
-    name = "text"
+    name = "properties"
 
     def __init__(self, store_loc, store_path, delim='>'):
         KvStore.__init__(self, store_loc, store_path, delim)
 
     def load(self) -> KvPayload:
-        """ Loads data from text file """
+        """ Loads data from properties file """
+        data = {}
         with open(self._store_path, 'r') as f:
-            return KvPayload(f.read(), self._delim)
+            try:
+                for line in f.readlines():
+                    line = line.strip()
+                    if not line or line[0] == '#':
+                        continue
+                    key, val = line.split('=', 1)
+                    data[key.strip()] = val.strip()
+            except Exception as ex:
+                raise KvError(errno.ENOENT, "Invalid properties store format %s. %s.", line, ex)
+        return KvPayload(data, self._delim)
 
     def dump(self, data) -> None:
         """ Dump the data to desired file or to the source """
+        kv_list = data.get_data()
         with open(self._store_path, 'w') as f:
-            f.write(data.get_data())
+            for key, val in kv_list.items():
+                f.write("%s = %s\n" %(key, val))
 
 
 class PillarStore(KvStore):
@@ -225,6 +258,7 @@ class PillarStore(KvStore):
 
     def get(self, key):
         """Get pillar data for key."""
+        import json
         cmd = f"salt-call pillar.get {key} --out=json"
         cmd_proc = SimpleProcess(cmd)
         out, err, rc = cmd_proc.run()

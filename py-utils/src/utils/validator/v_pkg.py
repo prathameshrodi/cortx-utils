@@ -32,13 +32,8 @@ class PkgV:
 		stdout, stderr, retcode = handler.run()
 		if retcode != 0:
 			raise VError(errno.EINVAL,
-				     "cmd: %s failed with error code: %d"
-				     %(cmd, retcode))
-		if stderr:
-			raise VError(errno.EINVAL,
-				     "cmd: %s failed with stderr: %s"
-				     %(cmd, stderr))
-		# To calm down codacy.
+				     "cmd: %s failed with error code: %d, stderr: %s"
+				     %(cmd, retcode, stderr))
 		return stdout.decode("utf-8")
 
 	def validate(self, v_type: str, args: list, host: str = None):
@@ -69,7 +64,7 @@ class PkgV:
 			if host != None:
 				result = self.__search_pkg(f"ssh {host} rpm -qa")
 			else:
-				result = self.__search_pkg(f"rpm -qa")
+				result = self.__search_pkg("rpm -qa")
 			if result.find(f"{pkg}") == -1:
 				raise VError(errno.EINVAL,
 					     "rpm pkg: %s not found" % pkg)
@@ -79,9 +74,9 @@ class PkgV:
 
 		for pkg in pkgs:
 			if host != None:
-				result = self.__search_pkg(f"ssh {host} pip3 list --format=legacy")
+				result = self.__search_pkg(f"ssh {host} pip3 list")
 			else:
-				result = self.__search_pkg(f"pip3 list --format=legacy")
+				result = self.__search_pkg("pip3 list")
 			if result.find(f"{pkg}") == -1:
 				raise VError(errno.EINVAL,
 					     "pip3 pkg: %s not found" % pkg)
