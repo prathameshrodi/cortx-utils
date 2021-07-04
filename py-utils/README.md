@@ -1,6 +1,6 @@
 <!--
 CORTX-Py-Utils: CORTX Python common library.
-Copyright (c) 2020 Seagate Technology LLC and/or its Affiliates
+Copyright (c) 2021 Seagate Technology LLC and/or its Affiliates
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as published
 by the Free Software Foundation, either version 3 of the License, or
@@ -23,15 +23,14 @@ A common utils framework which includes common modules across components
 
 ## Prerequisites for build
 ```bash
-$ sudo yum install gcc
-$ sudo yum install rpm-build
-$ sudo yum install python36
-$ sudo yum install python36-pip
-$ sudo yum install python36-devel
-$ sudo yum install python36-setuptools
-$ sudo yum install openssl-devel
-$ sudo yum install libffi-devel
+sudo yum install gcc rpm-build python36 python36-pip python36-devel python36-setuptools openssl-devel libffi-devel
 ```
+
+## Clone
+```
+git clone --recursive https://github.com/Seagate/cortx-utils -b main
+```
+
 
 ## Build
 **Note:** Use one of following method to create build package
@@ -40,13 +39,14 @@ $ sudo yum install libffi-devel
     - It will create `cortx_py_utils-1.0.0-py3-none-any.whl`
 ```bash
 $ pip3 install wheel
+$ cd ./cortx-utils/py-utils
 $ python3 setup.py bdist_wheel
 ```
 
   - Create RPM Package
 It will create `cortx-py-utils-1.0.0-1_<git-version>.noarch.rpm` by default. One can change the version by passing extra `-v <version_string>` parameter.
 Below command passes version string as 2.0.0 and build number 2, which creates `cortx-py-utils-2.0.0-2_<git-version>.noarch.rpm`
-Run below command from repo root.
+Run below command from repo root (cortx-utils).
 ```bash
 $ ./jenkins/build.sh -v 2.0.0 -b 2
 ```
@@ -54,7 +54,7 @@ $ ./jenkins/build.sh -v 2.0.0 -b 2
 ## Installation
   - Installation with pip package
 ```bash
-$ cd dist;
+$ cd ./py-utils/dist
 $ pip3 install cortx_py_utils-1.0.0-py3-none-any.whl
 ```
 
@@ -62,8 +62,8 @@ $ pip3 install cortx_py_utils-1.0.0-py3-none-any.whl
 Note : The rpm package installation will fail if any dependent python package is not installed.
 Please refer to WIKI (https://github.com/Seagate/cortx-utils/wiki/%22cortx-py-utils%22-single-node-manual-provisioning)
 ```bash
-$ cd dist;
-$ yum install -y cortx-py-utils-1.0.0-1.noarch.rpm
+$ cd ./py-utils/dist
+$ sudo yum install -y cortx-py-utils-*.noarch.rpm
 ```
 
 ## Uninstall
@@ -80,7 +80,7 @@ $ yum remove cortx-py-utils
 
 ## Update new dependency package
 
-  - Add package in `requirements.txt`.
+  - Add package in `python_requirements.txt`.
 
 <hr>
 
@@ -157,4 +157,14 @@ except Exception as e:
 Note The second example below shows how to check if given paths are ok on a remote host specified by "remote_hostname".
 ```python
 	PathV().validate('exists', ["dir:/", "file:/etc/hosts", "device:/dev/loop9"], "remote_hostname")
+```
+  - Confstore key validator: This can be used to check if an preloaded index on confstore has the requested keys present or not. Use command "exists" to check, pass the preloaded index and a list of 'keys'.
+```python
+from cortx.utils.validator.v_confkeys import ConfKeysV
+try:
+	ConfKeysV().validate('exists', index, ['bridge', 'bridge>namei'])
+except Exception as e:
+	if "key missing" not in f"{e}":
+		raise Exception(f"Unexpected exception: {e}")
+	print("One or more keys are missing.")
 ```

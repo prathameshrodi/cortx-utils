@@ -16,6 +16,7 @@
 # please email opensource@seagate.com or cortx-questions@seagate.com.
 
 import dbus
+from dbus.mainloop.glib import DBusGMainLoop
 import inspect
 import errno
 import sys
@@ -53,6 +54,7 @@ class DbusServiceHandler(ServiceHandler):
     name = "dbus"
 
     def __init__(self):
+        DBusGMainLoop(set_as_default=True)
         self._system_bus, self._dbus_manager = \
             DbusServiceHandler._get_systemd_interface()
 
@@ -167,27 +169,27 @@ class Service:
         self._service_name = service_name
         if handler_type is None:
             handler_type = "dbus"
-        self._handler = ServiceHandler.get(handler_type)
+        self._handler = ServiceHandler.get(handler_type)()
 
     def start(self):
-        self._handler.start(self, self._service_name)
+        self._handler.start(self._service_name)
 
     def stop(self):
-        self._handler.stop(self, self._service_name)
+        self._handler.stop(self._service_name)
 
     def restart(self):
-        self._handler.restart(self, self._service_name)
+        self._handler.restart(self._service_name)
 
     def enable(self):
-        self._handler.enable(self, self._service_name)
+        self._handler.enable(self._service_name)
 
     def disable(self):
-        self._handler.disable(self, self._service_name)
+        self._handler.disable(self._service_name)
 
     def get_state(self):
-        service_state = self._handler.get_state(self, self._service_name)
+        service_state = self._handler.get_state(self._service_name)
         return service_state
 
     def is_enabled(self):
-        status = self._handler.is_enabled(self, self._service_name)
-        return status
+        status = self._handler.is_enabled(self._service_name)
+        return status == 'enabled'

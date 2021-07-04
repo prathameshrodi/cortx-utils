@@ -20,6 +20,7 @@ import argparse
 import inspect
 import sys
 import traceback
+from cortx.utils.process import SimpleProcess
 from argparse import RawTextHelpFormatter
 from cortx.utils.conf_store import Conf
 from cortx.utils.conf_store.error import ConfError
@@ -34,6 +35,11 @@ class ConfCli:
     def init(url: str):
         """ Load ConfStore URL """
         Conf.load(ConfCli._index, url)
+
+    @staticmethod
+    def load(url: str, index: str):
+        """ Load ConfStore URL """
+        Conf.load(index, url)
 
     @staticmethod
     def set(args):
@@ -70,6 +76,50 @@ class ConfCli:
         return Format.dump(val_list, format_type)
 
     @staticmethod
+    def diff(args) -> str:
+        """ Compare two diffenent string value for the given keys """
+        if len(args.args) < 1:
+            args.key_index = None
+            string_1 = ConfCli.get_keys(args)
+            diff_index = "string_diff"
+            args.url = args.second_url
+            ConfCli.load(args.url, diff_index)
+            string_2 = ConfCli.get_keys(args, diff_index)
+        else:
+            string_1 = ConfCli.get(args)
+            ConfCli._index = "string_diff"
+            args.url = args.second_url
+            ConfCli.init(args.url)
+            string_2 = ConfCli.get(args)
+        args.format = None
+        cmd = """bash -c "diff <(echo \\"%s\\") <(echo \\"%s\\")" """ %(string_1, string_2)
+        cmd_proc = SimpleProcess([cmd])
+        cmd_proc.shell = True
+        stdout, stderr, rc = cmd_proc.run()
+        output = stdout.decode('utf-8') if rc == 1 else \
+             stderr.decode('utf-8')
+        return output
+
+    @staticmethod
+    def merge(args):
+        """ merges source conf file into dest. conf file. """
+
+        src_index = 'src_index'
+        dest_index = ConfCli._index
+        ConfCli.load(args.src_url, src_index)
+        if not args.keys:  # no keys provided
+            keys = Conf.get_keys(src_index)  # getting src file keys
+        else:
+            keys = args.keys[0].split(';')
+            src_keys = Conf.get_keys(src_index)
+            for key in keys:
+                if key not in src_keys:
+                    raise ConfError(errno.ENOENT, "%s is not present in %s", \
+                        key, args.src_url)
+        Conf.merge(dest_index, src_index, keys)
+        Conf.save(dest_index)
+
+    @staticmethod
     def delete(args):
         """ Deletes given set of keys from the config """
         key_list = args.args[0].split(';')
@@ -79,6 +129,17 @@ class ConfCli:
             is_deleted.append(status)
         if any(is_deleted):
             Conf.save(ConfCli._index)
+
+    @staticmethod
+    def get_keys(args, index: str = None) -> list:
+        """ Returns list of keys present in store """
+        key_index = 'true' if args.key_index == None else args.key_index.lower().strip()
+        key_index = True if key_index == 'true' else False if key_index == 'false' else None
+        if key_index is None:
+            raise ConfError(errno.EINVAL, "invalid key_index value %s", key_index)
+        if index is None:
+            index = ConfCli._index
+        return Conf.get_keys(index, key_index=key_index)
 
 
 class GetCmd:
@@ -96,6 +157,22 @@ class GetCmd:
         s_parser.add_argument('-f', dest='format', help=
                 'Output Format json(default), yaml or toml')
         s_parser.add_argument('args', nargs='+', default=[], help='args')
+
+
+class DiffCmd:
+    """ Get Diff Cmd Structure """
+
+    @staticmethod
+    def add_args(sub_parser) -> None:
+        s_parser = sub_parser.add_parser('diff', help=
+            "Retrieves and compare the values for one or more keys\n."
+            "Multiple keys are separated using ';'.\n"
+            "Example(s): 'k1', 'k1>k2;k3', 'k4[2]>k5', 'k6>k4[2]>k5'\n\n"
+            "Example command:\n"
+            "# conf yaml:///tmp/old_release.info diff yaml:///tmp/new_release.conf -k 'version;branch'\n\n")
+        s_parser.add_argument('second_url', help='Second url for comparison' )
+        s_parser.set_defaults(func=ConfCli.diff)
+        s_parser.add_argument('-k', dest='args',  nargs='+', default=[], help='Keys list')
 
 
 class SetCmd:
@@ -132,6 +209,43 @@ class DeleteCmd:
         s_parser.set_defaults(func=ConfCli.delete)
         s_parser.add_argument('args', nargs='+', default=[], help='args')
 
+class GetsKeysCmd:
+    """ Get keys command structure """
+
+    @staticmethod
+    def add_args(sub_parser) -> None:
+        s_parser = sub_parser.add_parser('get_keys', help=
+            "Retrieves the list of keys\n."
+            "Example(s): ['k1', 'k1>k2','k3'], ['k4[2]>k5', 'k6>k4[2]>k5']\n\n"
+            "Example command:\n"
+            "# conf json:///tmp/csm.conf get_keys\n\n"
+            "# conf json:///tmp/csm.conf get_keys -key_index true\n\n"
+            "# conf json:///tmp/csm.conf get_keys -key_index false\n\n")
+        s_parser.set_defaults(func=ConfCli.get_keys)
+        s_parser.add_argument('-key_index', dest='key_index', help=
+            "key_index={True|False} (default: True)\n"
+            "when True, returns keys including array index\n"
+            "e.g. In case of 'xxx[0],xxx[1]', only 'xxx' is returned\n\n")
+
+
+class MergeCmd:
+    """ Get Merge Cmd Structure """
+
+    @staticmethod
+    def add_args(sub_parser) -> None:
+        s_parser = sub_parser.add_parser('merge', help=
+            "Merges contents of source file into destination conf file\n."
+            "based on source conf file keys. Keys are optional parameters\n"
+            "Multiple keys are separated using ';'.\n"
+            "Example keys passed: 'k1', 'k1;k2;k3'\n\n"
+            "Example command:\n"
+            "# conf yaml:///tmp/test_dest.file merge yaml:///tmp/test_src.file\n\n"
+            "# conf yaml:///tmp/test_dest.file merge yaml:///tmp/test_src.file -k 'k1;k2;k3'\n\n")
+        s_parser.add_argument('src_url', help='Source url for merge')
+        s_parser.set_defaults(func=ConfCli.merge)
+        s_parser.add_argument('-k', dest='keys',  nargs='+', default=[], \
+            help='Only specified keys will be merged.')
+
 
 def main():
     # Setup Parser
@@ -160,6 +274,7 @@ def main():
         sys.stderr.write("%s\n\n" % str(e))
         sys.stderr.write("%s\n" % traceback.format_exc())
         return errno.EINVAL
+
 
 if __name__ == "__main__":
     rc = main()
